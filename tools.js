@@ -5,6 +5,8 @@
 
   let arrays = Object.create(null)
 
+  // 数组是否为空
+  arrays.empty = arr => !!(Array.isArray(arr) && arr.length)
   // 布尔全等判断  arrays.all([1, 2, 3], x => x > 1)
   arrays.all = (arr, fn = Boolean) => arr.every(fn)
 
@@ -43,15 +45,14 @@
                   : arr.reduce((acc, v, i) => (v === val ? [...acc, i] : acc), []))
 
   // 生成两数之间指定长度的随机数组 
-  arrays.randomIntArrayInRange = (min, max, n = 1) => 
-                  Array.from({ length: n }, () => Math.floor(Math.random() * (max - min + 1)) + min);
+  arrays.randomIntArrayInRange = (min, max, length = 1) => 
+                  Array.from({ length }, () => Math.floor(Math.random() * (max - min + 1)) + min);
 
   // 根据parent_id生成树结构 
   arrays.nest = (items, id = null, link = 'parent_id') => 
                   items
                   .filter(item => item[link] === id)
                   .map(item => ({...item, children: nest(items, item.id)}))
-
 
 
   /**
@@ -64,47 +65,139 @@
   funs.defer = (fn, ...args) => setTimeout(fn, 1, ...args)
 
   // 转驼峰
-  funs.toHump = (str, fmt = '-') => str.replace(new RegExp(`${s}(\\w)`, 'g'), ($0, $1) => $1.toUpperCase())
+  funs.toHump = (str, s = '-') => str.replace(new RegExp(`${s}(\\w)`, 'g'), ($0, $1) => $1.toUpperCase())
 
+  // 防抖, 一定时间内未触发在执行
+  funs.debounce = ({callback = null, reset = null, seconds = 100}) => {
+    let timer = null
+    return () => {
+      if (timer) {
+        clearTimeout(timer)
+        reset && typeof reset === 'function' && reset.apply(this)
+      }
+      timer && clearTimeout(timer)
+      timer = setTimeout(() => {
+        callback.apply(this)
+        timer = null
+      }, seconds)
+    }
+  }
 
+  // 节流  一定时间段内只调用一次事件处理函数
+  funs.throttle = ({callback = null, reset = null, seconds = 1000}) => {
+    let timer = null
+    return () => {
+      if (!timer) {
+        timer = setTimeout(() => {
+          callback.apply(this)
+          timer = null
+        }, seconds)
+      } else {
+        reset && typeof reset === 'function' && reset.apply(this)
+      }
+    }
+  }
+
+  // 断流监听  一定时间内触发不执行， 等时间过去在激活
+  funs.disconnection = ({callback = null, reset = null, seconds = 1000}) => {
+    let timer = null, isActive = true
+    return () => {
+      if (isActive) {
+        callback.apply(this)
+        timer = setTimeout(() => {
+          isActive = true
+          timer = null
+        }, seconds)
+      } else {
+        reset && typeof reset === 'function' && reset.apply(this)
+      }
+      isActive = false
+    }
+  }
 
   /**
     * 字符串
     */
   let strs = Object.create(null)
 
-  // 返回字符串的字节长度  strs.byteSize('Hello World')
-  strs.byteSize = str => new Blob([str]).size
-
-  // 首字母大写  strs.capitalize('foafasf')
-  strs.capitalize = ([first, ...rest]) => first.toUpperCase() + rest.join('')
-
-  // 每个单词首字母大写  capitalizeEveryWord('hello world!') => Hello World!
-  strs.capitalizeEveryWord = str => str.replace(/\b[a-z]/g, char => char.toUpperCase())
-
-  // 首字母小写
-  strs.decapitalize = ([first, ...rest]) => first.toLowerCase() + rest.join('')
-
-  // 银行卡号码校验  strs.luhnCheck('4485275742308327') || strs.luhnCheck(4485275742308327), 参考luhn算法
-  strs.luhnCheck = num => {
-      let arr = (num + '')
-      .split('')
-      .reverse()
-      .map(x => parseInt(x));
-      let lastDigit = arr.splice(0, 1)[0];
-      let sum = arr.reduce((acc, val, i) => (i % 2 !== 0 ? acc + val : acc + ((val * 2) % 9) || 9), 0);
-      sum += lastDigit;
-      return sum % 10 === 0;
-  }
+  // 返回字符串的字节长度  strs.byteSize('Hello World')  
+  strs.byteSize = (str) => Array.from(str).reduce((i, v) => {
+    if(/.*[\u4e00-\u9fa5]+.*$/.test(v)) {
+      return i += v.length
+    } else {
+      return i += (new Blob([v]).size)
+    }
+  }, 0)
 
   // 删除字符串中的HTMl标签  strs.stripHTMLTags('<p><em>lorem</em> <strong>ipsum</strong></p>') => 'lorem ipsum'
   strs.stripHTMLTags = str => str.replace(/<[^>]*>/g, '')
+
+  // 字符转换
+  strs.changeCase = (str, type = 1) => {
+    // type: 1:每个单词首字母大写 2：每个首字母小写 3：大小写转换 4：全部大写 5：全部小写 6：首字母大写 7: 首字母小写
+    switch (type) {
+      case 1:
+          return str.replace(/\b[a-z]/g, char => char.toUpperCase());
+      case 2:
+          return str.replace(/\b[A-Z]/g, char => char.toLowerCase());
+      case 3:
+          return str.split('').map(function (word) {
+              if (/[a-z]/.test(word)) {
+                  return word.toUpperCase();
+              } else {
+                  return word.toLowerCase()
+              }
+          }).join('')
+      case 4:
+          return str.toUpperCase();
+      case 5:
+          return str.toLowerCase();
+      case 6:
+          return function() {
+            let [first, ...rest] = str
+            return first.toUpperCase() + rest.join('')
+          }()
+      case 7:
+          return function() {
+            let [first, ...rest] = str
+            return first.toLowerCase() + rest.join('')
+          }()
+      default:
+          return str;
+    }
+  }
+
+  // 去除空格  type: 1-所有空格 2-前后空格 3-前空格 4-后空格
+  strs.trim = (str, type = 1) => {
+    // type: 1-所有空格 2-前后空格 3-前空格 4-后空格
+    switch (type) {
+        case 1:
+            return str.replace(/\s+/g, "");
+        case 2:
+            return str.replace(/(^\s*)|(\s*$)/g, "");
+        case 3:
+            return str.replace(/(^\s*)/g, "");
+        case 4:
+            return str.replace(/(\s*$)/g, "");
+        default:
+            return str;
+    }
+  }
+
 
   /**
     * 对象
     */
 
   let objects = Object.create(null)
+
+  // 是否为空对象
+  objects.empty = (val, isEnumerable = false) => 
+          !!(Object.prototype.toString.call(val) === '[object Object]' ? 
+          isEnumerable ? 
+          Reflect.ownKeys(val) : 
+          Object.keys(val).length : 
+          false)
 
   // 格式化日期参数
   objects.formatDatetime = (validDate, fmt) => {
@@ -226,21 +319,124 @@
   // 计算数组或多个数字的总和   sum(1, 2, 3, 4) || sum(...[1, 2, 3, 4])
   nums.sum = (...arr) => [...arr].reduce((acc, val) => acc + val, 0)
 
+  // 洗牌算法随机
+  nums.shuffle = arr => {
+    var result = [],
+        random;
+    while (arr.length > 0) {
+        random = Math.floor(Math.random() * arr.length);
+        result.push(arr[random])
+        arr.splice(random, 1)
+    }
+    return result;
+  }
+
+  // 将阿拉伯数字翻译成中文的大写数字
+  nums.numberToChinese = num => {
+    var AA = new Array("零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十");
+    var BB = new Array("", "十", "百", "仟", "萬", "億", "点", "");
+    var a = ("" + num).replace(/(^0*)/g, "").split("."),
+        k = 0,
+        re = "";
+    for (var i = a[0].length - 1; i >= 0; i--) {
+        switch (k) {
+            case 0:
+                re = BB[7] + re;
+                break;
+            case 4:
+                if (!new RegExp("0{4}//d{" + (a[0].length - i - 1) + "}$")
+                    .test(a[0]))
+                    re = BB[4] + re;
+                break;
+            case 8:
+                re = BB[5] + re;
+                BB[7] = BB[5];
+                k = 0;
+                break;
+        }
+        if (k % 4 == 2 && a[0].charAt(i + 2) != 0 && a[0].charAt(i + 1) == 0)
+            re = AA[0] + re;
+        if (a[0].charAt(i) != 0)
+            re = AA[a[0].charAt(i)] + BB[k % 4] + re;
+        k++;
+    }
+
+    if (a.length > 1) // 加上小数部分(如果有小数部分)
+    {
+        re += BB[6];
+        for (var i = 0; i < a[1].length; i++)
+            re += AA[a[1].charAt(i)];
+    }
+    if (re == '一十')
+        re = "十";
+    if (re.match(/^一/) && re.length == 3)
+        re = re.replace("一", "");
+    return re;
+  }
+
 
 
   /**
-    * 浏览器操作及其它
+    * 其他工具函数
     */
 
   let plugins = Object.create(null)
 
-  // 检查页面底部是否可见
-  plugins.bottomVisible = () =>
-          document.documentElement.clientHeight + window.scrollY >=
-          (document.documentElement.scrollHeight || document.documentElement.clientHeight)
+  // 是否url地址
+  plugins.isURL = url => /^http[s]?:\/\/.*/.test(url)
 
-  // 返回当前链接url
-  plugins.currentURL = () => window.location.href
+  // 是否字符串
+  plugins.isString = str => Object.prototype.toString.call(str).slice(8, -1) === 'String'
+  
+  // 是否数字
+  plugins.isNumber = val => Object.prototype.toString.call(val).slice(8, -1) === 'Number'
+
+  // 是否boolean
+  plugins.isBoolean = val => Object.prototype.toString.call(val).slice(8, -1) === 'Boolean'
+
+  // 是否函数
+  plugins.isFunction = val => Object.prototype.toString.call(val).slice(8, -1) === 'Function'
+
+  // 是否为null
+  plugins.isNull = val => Object.prototype.toString.call(val).slice(8, -1) === 'Null'
+
+  // 是否undefined
+  plugins.isUndefined = val => Object.prototype.toString.call(val).slice(8, -1) === 'Undefined'
+
+  // 是否数组
+  plugins.isArray = val => Object.prototype.toString.call(val).slice(8, -1) === 'Array'
+
+  // 是否对象
+  plugins.isObject = val => Object.prototype.toString.call(val).slice(8, -1) === 'Object'
+
+  // 是否为浏览器环境
+  plugins.isBrowser = () => ![typeof window, typeof document].includes('undefined')
+
+  //是否ios 
+  plugins.isIos = _ => {
+    const u = navigator.userAgent;
+    if (u.indexOf('Android') > -1 || u.indexOf('Linux') > -1) {  //安卓手机
+        return false
+    } else if (u.indexOf('iPhone') > -1) {//苹果手机
+        return true
+    } else if (u.indexOf('iPad') > -1) {//iPad
+        return false
+    } else if (u.indexOf('Windows Phone') > -1) {//winphone手机
+        return false
+    } else {
+        return false
+    }
+  }
+
+  // 动态引入js
+  plugins.injectScript = src => {
+    const s = document.createElement('script');
+    s.type = 'text/javascript';
+    s.async = true;
+    s.src = src;
+    const t = document.getElementsByTagName('script')[0];
+    t.parentNode.insertBefore(s, t);
+  }
 
   // 检查是否包含子元素
   plugins.elementContains = (parent, child) => 
@@ -265,14 +461,40 @@
   // 在指定元素之前插入新元素
   plugins.insertBefore = (el, htmlString) => el.insertAdjacentHTML('beforebegin', htmlString)
 
-  // 检查是否为浏览器环境
-  plugins.isBrowser = () => ![typeof window, typeof document].includes('undefined')
-
   // 随机十六进制颜色
   plugins.randomHexColorCode = () => {
     let n = (Math.random() * 0xfffff * 1000000).toString(16);
     return '#' + n.slice(0, 6);
   }
+
+  // 16进制颜色转RGBRGBA字符串
+  plugins.colorToRGB = (val, opa) => {
+    var pattern = /^(#?)[a-fA-F0-9]{6}$/; //16进制颜色值校验规则
+    var isOpa = typeof opa == 'number'; //判断是否有设置不透明度
+
+    if (!pattern.test(val)) { //如果值不符合规则返回空字符
+        return '';
+    }
+
+    var v = val.replace(/#/, ''); //如果有#号先去除#号
+    var rgbArr = [];
+    var rgbStr = '';
+
+    for (var i = 0; i < 3; i++) {
+        var item = v.substring(i * 2, i * 2 + 2);
+        var num = parseInt(item, 16);
+        rgbArr.push(num);
+    }
+
+    rgbStr = rgbArr.join();
+    rgbStr = 'rgb' + (isOpa ? 'a' : '') + '(' + rgbStr + (isOpa ? ',' + opa : '') + ')';
+    return rgbStr;
+  }
+
+  // 检查页面底部是否可见
+  plugins.bottomVisible = () =>
+          document.documentElement.clientHeight + window.scrollY >=
+          (document.documentElement.scrollHeight || document.documentElement.clientHeight)
 
   // 平滑滚动至顶部   scrollToTop(1 - ~~) , 数值越大， 速度就越慢
   plugins.scrollToTop = (rate = 8) => {
@@ -285,7 +507,7 @@
 
   // 滚动到指定元素区域  smoothScroll('.id')
   plugins.smoothScroll = element =>
-          document.querySelector(element).scrollIntoView({behavior: 'smooth'})
+          element.scrollIntoView({behavior: 'smooth'})
 
   // 检测移动/PC设备
   plugins.detectDeviceType = _ => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -298,15 +520,14 @@
     y: el.pageYOffset !== undefined ? el.pageYOffset : el.scrollTop
   })
 
-  // 获取 URL 中的参数
-  plugins.getUrlParams = param => {
-    const query = window.location.search.substring(1)
-    const params = query.split("&")
-    for (let i = 0; i < params.length; i++) { 
-      let pair = params[i].split("="); 
-      if(pair[0] == param){return pair[1];} 
-    } 
-      return(false)
+  // el是否在视口范围内
+  plugins.elementIsVisibleInViewport = (el, partiallyVisible = false) => {
+    const { top, left, bottom, right } = el.getBoundingClientRect();
+    const { innerHeight, innerWidth } = window;
+    return partiallyVisible
+        ? ((top > 0 && top < innerHeight) || (bottom > 0 && bottom < innerHeight)) &&
+        ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
+        : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth;
   }
 
   // 禁止右键、选择、复制 contextmenu / selectstart / copy
@@ -316,6 +537,21 @@
         return event.returnValue = false
       })
     })
+  }
+
+  // 拦截粘贴板
+  plugins.copyTextToClipboard = value => {
+    var textArea = document.createElement("textarea");
+    textArea.style.background = 'transparent';
+    textArea.value = value;
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+        var successful = document.execCommand('copy');
+    } catch (err) {
+        console.log('Oops, unable to copy');
+    }
+    document.body.removeChild(textArea);
   }
 
   // 压缩CSS样式代码
@@ -328,6 +564,9 @@
     return s == null ? "" : s[1];
   }
 
+  // 返回当前链接url
+  plugins.currentURL = () => window.location.href
+  
   // 检验URL链接是否有效
   plugins.getUrlState = (url) => {
     const xmlhttp = new ActiveXObject("microsoft.xmlhttp");
@@ -349,6 +588,68 @@
     }
   }
 
+  // 获取 URL 中的参数
+  plugins.getUrlParams = (url = location.href) => {
+    var o = {}
+    // 匹配出所有参数，
+    var queryArr = url.match(new RegExp("[\?\&][^\?\&]+=[^\?\&]+", "g"))
+    if (queryArr) {
+        // 并去除 ？ & 符号 以及#号之后的字符串；
+        var filterQuery = queryArr.map(v => v.replace(/\?|\&|\#.*$/g,''))
+        if (filterQuery) {
+            filterQuery.forEach(v => {
+                var a = v.split('=');
+                o[a[0]] = a[1] || '';
+            })
+            return o
+        } else {
+            return o
+        }
+    } else {
+        return o
+    }
+  }
+
+  // 追加url参数
+  plugins.appendQuery = (url, key, value) => {
+    if(!value) {
+      return url;
+    }
+    var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+    var separator = url.indexOf('?') !== -1 ? "&" : "?";
+    if (url.match(re)) {
+      return url.replace(re, '$1' + key + "=" + value + '$2');
+    }
+    else {
+      return url + separator + key + "=" + value;
+    }
+  }
+
+  // 根据url地址下载
+  plugins.download = url => {
+    var isChrome = navigator.userAgent.toLowerCase().indexOf('chrome') > -1;
+    var isSafari = navigator.userAgent.toLowerCase().indexOf('safari') > -1;
+    if (isChrome || isSafari) {
+        var link = document.createElement('a');
+        link.href = url;
+        if (link.download !== undefined) {
+            var fileName = url.substring(url.lastIndexOf('/') + 1, url.length);
+            link.download = fileName;
+        }
+        if (document.createEvent) {
+            var e = document.createEvent('MouseEvents');
+            e.initEvent('click', true, true);
+            link.dispatchEvent(e);
+            return true;
+        }
+    }
+    if (url.indexOf('?') === -1) {
+        url += '?download';
+    }
+    window.open(url, '_self');
+    return true;
+  }
+
   // 获取窗体可见范围的宽与高
   plugins.getViewSize = () => {
     const de = document.documentElement;
@@ -359,6 +660,33 @@
       w: viewW,
       h: viewH
     };
+  }
+
+  // 设置浏览器缓存
+  plugins.setCahe = (key, value, {type = localStorage, timeStap}) => {
+    const optval = {
+      timeStap,
+      value
+    }
+    type.setItem(key, JSON.stringify(optval))
+  }
+
+  // 删除缓存
+  plugins.removeCahe = (key, type = localStorage) => {
+    type.removeItem(key)
+  }
+
+  // 读取浏览器缓存
+  plugins.getCahe = (key, type = localStorage) => {
+    const opt = (JSON.parse(type.getItem(key)) || {})
+    if (opt.timeStap) {
+      if (new Date().getTime() < opt.timeStap) {
+        return opt.value
+      } else {
+        plugins.removeCahe({type, key})
+        return undefined
+      }
+    } 
   }
 
 
@@ -467,6 +795,9 @@
 
   // 中国邮政编码
   regs.zipCode = new RegExp(/^(0[1-7]|1[0-356]|2[0-7]|3[0-6]|4[0-7]|5[1-7]|6[1-7]|7[0-5]|8[013-6])\d{4}$/)
+
+  //金额(小数点2位)
+  regs.money = new RegExp(/^\d*(?:\.\d{0,2})?$/)
 
   window.tools = {
     arrays,
